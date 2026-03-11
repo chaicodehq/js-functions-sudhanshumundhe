@@ -63,18 +63,64 @@
  *   election.castVote("V1", "C1", r => "voted!", e => "error: " + e);
  *   // => "voted!"
  */
-export function createElection(candidates) {
-  // Your code here
+export function createElection(candidates = []) {
+  // private state
+  const candidateMap = new Map(candidates.map(c => [c.id, c]));
+  const votes = Object.fromEntries(candidates.map(c => [c.id, 0]));
+  const registered = new Set();
+  const voted = new Set();
+
+  return {
+    registerVoter(voter) {
+      if (!voter?.id || typeof voter.age !== "number" || voter.age < 18 || registered.has(voter.id)) {
+        return false;
+      }
+      registered.add(voter.id);
+      return true;
+    },
+
+    castVote(voterId, candidateId, onSuccess, onError) {
+      const fail = msg => typeof onError === "function" ? onError(msg) : null;
+      if (!registered.has(voterId)) return fail("voter_not_registered");
+      if (!candidateMap.has(candidateId)) return fail("candidate_not_found");
+      if (voted.has(voterId)) return fail("already_voted");
+
+      votes[candidateId]++;
+      voted.add(voterId);
+      return typeof onSuccess === "function" ? onSuccess({ voterId, candidateId }) : null;
+    },
+
+    getResults(sortFn) {
+      let result = Array.from(candidateMap.values()).map(c => ({
+        ...c,
+        votes: votes[c.id] || 0
+      }));
+      return typeof sortFn === "function" ? result.sort(sortFn) : result.sort((a, b) => b.votes - a.votes);
+    },
+
+    getWinner() {
+      const results = this.getResults();
+      return results.length && results.some(r => r.votes > 0) ? results[0] : null;
+    }
+  };
 }
 
-export function createVoteValidator(rules) {
-  // Your code here
+export function createVoteValidator(rules = {}) {
+  return voter => {
+    if (!voter || typeof voter !== "object") return { valid: false, reason: "invalid_voter" };
+    for (const field of rules.requiredFields || []) if (!(field in voter)) return { valid: false, reason: `missing_${field}` };
+    if (rules.minAge && voter.age < rules.minAge) return { valid: false, reason: "age_requirement_not_met" };
+    return { valid: true };
+  };
 }
 
-export function countVotesInRegions(regionTree) {
-  // Your code here
+export function countVotesInRegions(region) {
+  if (!region || typeof region !== "object") return 0;
+  const votesHere = region.votes || 0;
+  const subTotal = (region.subRegions || []).reduce((sum, sub) => sum + countVotesInRegions(sub), 0);
+  return votesHere + subTotal;
 }
 
-export function tallyPure(currentTally, candidateId) {
-  // Your code here
+export function tallyPure(tally = {}, candidateId) {
+  return { ...tally, [candidateId]: (tally[candidateId] || 0) + 1 };
 }
